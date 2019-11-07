@@ -1,9 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoder/geocoder.dart';
 
-void main() => runApp(MyApp());
+void main() async {
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  Position position = await Geolocator()
+      .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+  if (position != null) {
+    print(position);
+    final latitude = position.latitude;
+    final longitude = position.longitude;
+    // final Coordinates coordinates = new Coordinates(latitude, longitude);
+    // final ville = await Geocoder.local.findAddressesFromCoordinates(coordinates);
+    List<Placemark> ville =
+        await Geolocator().placemarkFromCoordinates(latitude, longitude);
+    if (ville != null) {
+      print(ville.first.locality);
+      runApp(MyApp(ville.first.locality));
+    }
+  }
+}
 
 class MyApp extends StatelessWidget {
+  MyApp(String ville) {
+    this.ville = ville;
+  }
+
+  String ville;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -12,14 +38,17 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: Home(title: 'Alex Meteo'),
+      home: Home(ville, title: 'Alex Meteo'),
     );
   }
 }
 
 class Home extends StatefulWidget {
-  Home({Key key, this.title}) : super(key: key);
+  Home(String ville, {Key key, this.title}) : super(key: key) {
+    this.villeDeLutilisateur = ville;
+  }
 
+  String villeDeLutilisateur;
   final String title;
 
   @override
@@ -36,6 +65,7 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     obtenir();
+    coordonnees();
   }
 
   @override
@@ -69,10 +99,11 @@ class _HomeState extends State<Home> {
                 );
               } else if (i == 1) {
                 return new ListTile(
-                  title: textAvecStyle("Ma ville actuelle"),
+                  title: textAvecStyle(widget.villeDeLutilisateur),
                   onTap: () {
                     setState(() {
                       villeChoisie = null;
+                      coordonnees();
                       Navigator.pop(context);
                     });
                   },
@@ -81,9 +112,14 @@ class _HomeState extends State<Home> {
                 String ville = villes[i - 2];
                 return new ListTile(
                   title: textAvecStyle(ville),
+                  trailing: new IconButton(
+                    icon: new Icon(Icons.delete, color: Colors.white),
+                    onPressed: (() => supprimer(ville)),
+                  ),
                   onTap: () {
                     setState(() {
                       villeChoisie = ville;
+                      coordonnees();
                       Navigator.pop(context);
                     });
                   },
@@ -94,8 +130,8 @@ class _HomeState extends State<Home> {
         ),
       ),
       body: Center(
-        child:
-            new Text((villeChoisie == null) ? "Ville actuelle" : villeChoisie),
+        child: new Text(
+            (villeChoisie == null) ? widget.villeDeLutilisateur : villeChoisie),
       ),
     );
   }
@@ -128,6 +164,7 @@ class _HomeState extends State<Home> {
                   labelText: "Ville:",
                 ),
                 onSubmitted: (String str) {
+                  ajouter(str);
                   Navigator.pop(buildContext);
                 },
               )
@@ -145,4 +182,33 @@ class _HomeState extends State<Home> {
       });
     }
   }
+
+  void ajouter(String str) async {
+    SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
+    villes.add(str);
+    await sharedPreferences.setStringList(key, villes);
+    obtenir();
+  }
+
+  void supprimer(String str) async {
+    SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
+    villes.remove(str);
+    await sharedPreferences.setStringList(key, villes);
+    obtenir();
+  }
+
+  void coordonnees() async {
+    String str;
+    if (villeChoisie == null) {
+      str = widget.villeDeLutilisateur;
+    } else {
+      str = villeChoisie;
+    }
+    List<Placemark> coord = await Geolocator().placemarkFromAddress(str);
+    if (coord != null) {
+      coord.forEach((Placemark) => print(Placemark.position));
+    }
+  }
 }
+
+// List<Placemark> placemark = await Geolocator().placemarkFromAddress("Gronausestraat 710, Enschede");
