@@ -3,6 +3,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoder/geocoder.dart';
+import './api.dart';
+import 'package:http/http.dart' as http;
+import 'temps.dart';
+import 'dart:convert';
+import 'my_flutter_app_icons.dart';
 
 void main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -60,12 +65,13 @@ class _HomeState extends State<Home> {
   List<String> villes = [];
 
   String villeChoisie;
+  Temps tempsActuel;
 
   @override
   void initState() {
     super.initState();
     obtenir();
-    coordonnees();
+    appelApi();
   }
 
   @override
@@ -103,7 +109,7 @@ class _HomeState extends State<Home> {
                   onTap: () {
                     setState(() {
                       villeChoisie = null;
-                      coordonnees();
+                      appelApi();
                       Navigator.pop(context);
                     });
                   },
@@ -119,7 +125,7 @@ class _HomeState extends State<Home> {
                   onTap: () {
                     setState(() {
                       villeChoisie = ville;
-                      coordonnees();
+                      appelApi();
                       Navigator.pop(context);
                     });
                   },
@@ -129,11 +135,82 @@ class _HomeState extends State<Home> {
           ),
         ),
       ),
-      body: Center(
-        child: new Text(
-            (villeChoisie == null) ? widget.villeDeLutilisateur : villeChoisie),
-      ),
+      body: (tempsActuel == null)
+          ? Center(
+              child: new Text((villeChoisie == null)
+                  ? widget.villeDeLutilisateur
+                  : villeChoisie),
+            )
+          : new Container(
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.height,
+              decoration: new BoxDecoration(
+                  image: new DecorationImage(
+                      image: new AssetImage(assetName()), fit: BoxFit.cover)),
+              padding: EdgeInsets.all(20),
+              child: new Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: <Widget>[
+                  textAvecStyle(tempsActuel.name, fontSize: 30.0),
+                  new Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: <Widget>[
+                      textAvecStyle("${tempsActuel.temp.toInt()}°C",
+                          fontSize: 60.0),
+                      new Image.asset(tempsActuel.icon)
+                    ],
+                  ),
+                  textAvecStyle(tempsActuel.main, fontSize: 30.0),
+                  textAvecStyle(tempsActuel.description, fontSize: 25.0),
+                  new Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: <Widget>[
+                      new Column(
+                        children: <Widget>[
+                          textAvecStyle("Pressure", fontSize: 15.0),
+                          textAvecStyle("${tempsActuel.pression}",
+                              fontSize: 20.0)
+                        ],
+                      ),
+                      new Column(
+                        children: <Widget>[
+                          textAvecStyle("Humidity", fontSize: 15.0),
+                          textAvecStyle("${tempsActuel.humidity}",
+                              fontSize: 20.0)
+                        ],
+                      ),
+                      new Column(
+                        children: <Widget>[
+                          textAvecStyle("Max", fontSize: 15.0),
+                          textAvecStyle("${tempsActuel.temp_max}",
+                              fontSize: 20.0)
+                        ],
+                      ),
+                      new Column(
+                        children: <Widget>[
+                          textAvecStyle("Min", fontSize: 15.0),
+                          textAvecStyle("${tempsActuel.temp_min}",
+                              fontSize: 20.0)
+                        ],
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            ),
     );
+  }
+
+  String assetName() {
+    if (tempsActuel.icon.contains("n")) {
+      return "assets/n.jpg";
+    } else if (tempsActuel.icon.contains("01") ||
+        tempsActuel.icon.contains("02") ||
+        tempsActuel.icon.contains("03")) {
+      return "assets/d1.jpg";
+    } else {
+      return "assets/d2.jpg";
+    }
   }
 
   Text textAvecStyle(String data,
@@ -197,7 +274,7 @@ class _HomeState extends State<Home> {
     obtenir();
   }
 
-  void coordonnees() async {
+  void appelApi() async {
     String str;
     if (villeChoisie == null) {
       str = widget.villeDeLutilisateur;
@@ -206,7 +283,22 @@ class _HomeState extends State<Home> {
     }
     List<Placemark> coord = await Geolocator().placemarkFromAddress(str);
     if (coord != null) {
-      coord.forEach((Placemark) => print(Placemark.position));
+      final lat = coord.first.position.latitude;
+      final lon = coord.first.position.longitude;
+      String langue = Localizations.localeOf(context).languageCode;
+      final key = weather_api;
+
+      String urlApi =
+          "http://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lon&units=metric&lang=$langue&APPID=$key";
+      final reponse = await http.get(urlApi);
+      if (reponse.statusCode == 200) {
+        Temps temps = new Temps();
+        Map map = json.decode(reponse.body);
+        temps.fromJSON(map);
+        setState(() {
+          tempsActuel = temps;
+        });
+      }
     }
   }
 }
